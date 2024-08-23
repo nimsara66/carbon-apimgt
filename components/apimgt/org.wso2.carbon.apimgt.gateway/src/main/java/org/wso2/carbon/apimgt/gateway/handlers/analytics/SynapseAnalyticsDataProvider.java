@@ -17,6 +17,7 @@
 
 package org.wso2.carbon.apimgt.gateway.handlers.analytics;
 
+import org.apache.axiom.om.OMElement;
 import org.apache.axiom.soap.SOAPBody;
 import org.apache.axiom.soap.SOAPEnvelope;
 import org.apache.commons.logging.Log;
@@ -62,11 +63,7 @@ import org.wso2.carbon.utils.multitenancy.MultitenantUtils;
 import javax.xml.stream.XMLStreamException;
 import java.io.IOException;
 import java.nio.charset.Charset;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 import static org.apache.axis2.context.MessageContext.TRANSPORT_HEADERS;
 import static org.wso2.carbon.apimgt.gateway.handlers.analytics.Constants.UNKNOWN_VALUE;
@@ -545,9 +542,45 @@ public class SynapseAnalyticsDataProvider implements AnalyticsDataProvider {
                     byte[] size = soapbody.toString().getBytes(Charset.defaultCharset());
                     responseSize =  size.length;
                 }
+
+                if (soapbody != null) {
+                    OMElement bodyElement = (OMElement) (soapbody.getChildElements().next());
+
+                    // Extracting values using the path
+                    String model = getValueByPath(bodyElement, "model");
+                    String promptTokens = getValueByPath(bodyElement, "usage.prompt_tokens");
+                    String completionTokens = getValueByPath(bodyElement, "usage.completion_tokens");
+                    String totalTokens = getValueByPath(bodyElement, "usage.total_tokens");
+
+                    // Print the extracted values
+                    log.info("Model: " + model);
+                    log.info("Prompt Tokens: " + promptTokens);
+                    log.info("Completion Tokens: " + completionTokens);
+                    log.info("Total Tokens: " + totalTokens);
+                    // TODO: Add above details to messageContext
+                }
             }
         }
         return responseSize;
+    }
+
+    private static String getValueByPath(OMElement element, String path) {
+        String[] parts = path.split("\\.");
+
+        OMElement currentElement = element;
+        for (String part : parts) {
+            Iterator<?> children = currentElement.getChildrenWithLocalName(part);
+
+            if (children.hasNext()) {
+                currentElement = (OMElement) children.next();
+            } else {
+                // If the part is not found, return null
+                return null;
+            }
+        }
+
+        // Return the text content of the final element
+        return currentElement.getText();
     }
 
     public String getResponseContentType() {
