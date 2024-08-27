@@ -48,6 +48,8 @@ import org.wso2.carbon.apimgt.common.analytics.publishers.dto.enums.FaultCategor
 import org.wso2.carbon.apimgt.common.analytics.publishers.dto.enums.FaultSubCategory;
 import org.wso2.carbon.apimgt.common.gateway.constants.JWTConstants;
 import org.wso2.carbon.apimgt.gateway.APIMgtGatewayConstants;
+import org.wso2.carbon.apimgt.gateway.handlers.aiapi.AiTokenUsage;
+import org.wso2.carbon.apimgt.gateway.handlers.aiapi.AiVendorMetadata;
 import org.wso2.carbon.apimgt.gateway.handlers.security.APISecurityUtils;
 import org.wso2.carbon.apimgt.gateway.handlers.security.AuthenticationContext;
 import org.wso2.carbon.apimgt.gateway.internal.ServiceReferenceHolder;
@@ -409,6 +411,21 @@ public class SynapseAnalyticsDataProvider implements AnalyticsDataProvider {
         customProperties.put(Constants.API_CONTEXT_KEY, getApiContext());
         customProperties.put(Constants.RESPONSE_SIZE, getResponseSize());
         customProperties.put(Constants.RESPONSE_CONTENT_TYPE, getResponseContentType());
+
+        // If ai api then add new properties
+        Map<String, String> aiVendorMetadataMap = new HashMap<>();
+        AiVendorMetadata aiVendorMetadata = (AiVendorMetadata) messageContext.getProperty("aiVendorMetadata");
+        aiVendorMetadataMap.put("vendor", aiVendorMetadata.getVendorName());
+        aiVendorMetadataMap.put("model", aiVendorMetadata.getAiModelName());
+        customProperties.put("aiVendorMetadata", aiVendorMetadataMap);
+
+        Map<String, Integer> aiTokenUsageMap = new HashMap<>();
+        AiTokenUsage aiTokenUsage = (AiTokenUsage) messageContext.getProperty("aiTokenUsage");
+        aiTokenUsageMap.put("promptTokens", aiTokenUsage.getPromptTokens());
+        aiTokenUsageMap.put("completionTokens", aiTokenUsage.getCompletionTokens());
+        aiTokenUsageMap.put("totalTokens", aiTokenUsage.getTotalTokens());
+        customProperties.put("aiTokenUsage", aiTokenUsageMap);
+
         return customProperties;
     }
 
@@ -541,23 +558,6 @@ public class SynapseAnalyticsDataProvider implements AnalyticsDataProvider {
                 if (soapbody != null) {
                     byte[] size = soapbody.toString().getBytes(Charset.defaultCharset());
                     responseSize =  size.length;
-                }
-
-                if (soapbody != null) {
-                    OMElement bodyElement = (OMElement) (soapbody.getChildElements().next());
-
-                    // Extracting values using the path
-                    String model = getValueByPath(bodyElement, "model");
-                    String promptTokens = getValueByPath(bodyElement, "usage.prompt_tokens");
-                    String completionTokens = getValueByPath(bodyElement, "usage.completion_tokens");
-                    String totalTokens = getValueByPath(bodyElement, "usage.total_tokens");
-
-                    // Print the extracted values
-                    log.info("Model: " + model);
-                    log.info("Prompt Tokens: " + promptTokens);
-                    log.info("Completion Tokens: " + completionTokens);
-                    log.info("Total Tokens: " + totalTokens);
-                    // TODO: Add above details to messageContext
                 }
             }
         }
