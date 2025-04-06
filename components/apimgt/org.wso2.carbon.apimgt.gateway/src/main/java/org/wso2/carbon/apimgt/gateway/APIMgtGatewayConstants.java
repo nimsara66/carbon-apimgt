@@ -198,5 +198,11 @@ public class APIMgtGatewayConstants {
     public static final String ACCESS_GRANT_CLAIM_NAME = "grantVerificationClaim";
     public static final String ACCESS_GRANT_CLAIM_VALUE = "grantVerificationClaimValue";
     public static final String SHOULD_ALLOW_ACCESS_VALIDATION = "shouldAllowValidation";
+
+    public static class AIGuardrailConstants {
+        public static final String REGEX_PATTERN = "regexPattern";
+        public static final String MASK = "mask";
+        public static final String FAIL_ON_REGEX_MATCH = "failOnRegexMatch";
+    }
 }
 

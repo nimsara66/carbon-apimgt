@@ -49,6 +49,7 @@ import org.wso2.carbon.apimgt.gateway.utils.GatewayUtils;
 import org.wso2.carbon.apimgt.impl.utils.APIUtil;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
@@ -508,6 +509,19 @@ public class AIAPIMediator extends AbstractMediator implements ManagedLifecycle 
         int statusCode =
                 (int) ((Axis2MessageContext) messageContext).getAxis2MessageContext()
                         .getProperty(APIMgtGatewayConstants.HTTP_SC);
+
+        // Get the existing list or create a new one
+//        List<String> failoverEndpoints = (List<String>) messageContext.getProperty("_FAILOVER_ENDPOINTS");
+//
+//        if (failoverEndpoints == null) {
+//            failoverEndpoints = new ArrayList<>();
+//        }
+//        // Add the ENDPOINT_ADDRESS to the list
+//        String endpoint = (String) messageContext.getProperty("ENDPOINT_ADDRESS");
+//        if (endpoint != null) {
+//            failoverEndpoints.add(endpoint);
+//        }
+//        messageContext.setProperty("_FAILOVER_ENDPOINTS", failoverEndpoints);
 
         if (handleSuccessfulResponse(messageContext, statusCode, providerConfigs, roundRobinConfigs, failoverConfigs)) {
             return;
