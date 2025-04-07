@@ -439,6 +439,29 @@ public class GatewayUtils {
     }
 
     /**
+     * This method handles guardrail violations. If the request propagates a threat, this method generates
+     * an custom exception.
+     *
+     * @param messageContext contains the message properties of the relevant API request which was
+     *                       enabled the regexValidator message mediation in flow.
+     * @param errorCode      It depends on status of the error message.
+     * @param desc           Description of the error message.It describes the vulnerable type and where it happens.
+     * @return here return true to continue the sequence. No need to return any value from this method.
+     */
+    public static boolean handleGuardrail(org.apache.synapse.MessageContext messageContext,
+                                       String errorCode, String desc) {
+
+        messageContext.setProperty(SynapseConstants.ERROR_CODE, Integer.parseInt(errorCode));
+        if (messageContext.isResponse()) {
+            messageContext.setProperty(SynapseConstants.ERROR_MESSAGE, APIMgtGatewayConstants.BAD_RESPONSE);
+        } else {
+            messageContext.setProperty(SynapseConstants.ERROR_MESSAGE, APIMgtGatewayConstants.BAD_REQUEST);
+        }
+        messageContext.setProperty(SynapseConstants.ERROR_DETAIL, desc);
+        return true;
+    }
+
+    /**
      * This method use to clone the InputStream from the the message context. Basically
      * clone the request body.
      *

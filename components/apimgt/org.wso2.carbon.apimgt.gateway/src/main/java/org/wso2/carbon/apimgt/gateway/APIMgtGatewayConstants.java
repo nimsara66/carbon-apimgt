@@ -200,9 +200,21 @@ public class APIMgtGatewayConstants {
     public static final String SHOULD_ALLOW_ACCESS_VALIDATION = "shouldAllowValidation";
 
     public static class AIGuardrailConstants {
-        public static final String REGEX_PATTERN = "regexPattern";
-        public static final String MASK = "mask";
-        public static final String FAIL_ON_REGEX_MATCH = "failOnRegexMatch";
+        public static final String JSON_CONTENT_REGEX = "\\{.*?\\}";
+        public static final String WORD_SPLIT_REGEX =
+                "\\b(?:[a-zA-Z0-9]+(?:['\\-_][a-zA-Z0-9]+)*|[^\\s\\p{P}\\p{Z}\\p{C}])+\\b";
+        public static final String SENTENCE_SPLIT_REGEX =
+                "(?<=[.!?]|[.!?][\"')\\]])(?=\\s+[A-Z0-9]|$)";
+        public static final String BAD_RESPONSE = "502";
+        public static final String BAD_REQUEST = "400";
+
+        public enum GuardrailType {
+            SCHEMA_VALIDATION,
+            KEYS_VALIDATION,
+            REGEX_VALIDATION,
+            WORD_COUNT_VALIDATION,
+            SENTENCE_COUNT_VALIDATION
+        }
     }
 }
 
