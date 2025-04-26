@@ -111,7 +111,9 @@
               "Boolean",
               "Integer",
               "Enum",
-              "Map"
+              "Map",
+              "JSON",
+              "SecureString"
             ]
           },
           "defaultValue": {
