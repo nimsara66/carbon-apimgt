@@ -30,7 +30,9 @@ public class OperationPolicySpecAttribute {
         Integer,
         Boolean,
         Enum,
-        Map
+        Map,
+        JSON,
+        SecureString
     }
 
     private String name = null;
