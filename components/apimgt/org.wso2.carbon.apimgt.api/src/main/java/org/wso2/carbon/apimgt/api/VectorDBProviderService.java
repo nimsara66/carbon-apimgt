@@ -62,8 +62,22 @@ public interface VectorDBProviderService {
      * Retrieves the most relevant response from the vector database for the given embedding.
      *
      * @param embeddings The embedding to use for similarity search.
+     * @param filter A map of filter criteria to apply when retrieving the response.
      * @return The most relevant cached response.
      * @throws APIManagementException if an error occurs while retrieving the response.
      */
     <T extends Serializable> T retrieve(double[] embeddings, Map<String, String> filter) throws APIManagementException;
+
+    /**
+     * Retrieves the most relevant response from the vector database for the given embedding.
+     *
+     * @param embeddings The embedding to use for similarity search.
+     * @param filterExpr The filter expression to apply when retrieving the response.
+     * @param extraParams Additional parameters to consider during retrieval.
+     * @return The most relevant cached response.
+     * @throws APIManagementException if an error occurs while retrieving the response.
+     */
+    <T extends Serializable> T retrieve(double[] embeddings, String filterExpr, Map<String, Object> extraParams) throws APIManagementException;
+
+
 }

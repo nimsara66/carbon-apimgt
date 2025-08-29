@@ -385,6 +385,82 @@ public class ZillizVectorDBProviderServiceImpl implements VectorDBProviderServic
         }
     }
 
+    /**
+     * Retrieve the most similar response from the vector database.
+     */
+    @Override
+    public <T extends Serializable> T retrieve(double[] embeddings, String filterExpr, Map<String, Object> extraParams) throws APIManagementException {
+        if (embeddings == null) {
+            throw new APIManagementException("Embeddings cannot be null");
+        }
+
+        try {
+            String queryUrl = uri + APIConstants.AI.VECTOR_DB_PROVIDER_ZILLIZ_SEARCH_ENDPOINT;
+
+            JSONObject payload = new JSONObject();
+            payload.put(APIConstants.AI.VECTOR_DB_PROVIDER_COLLECTION_NAME, extraParams.get(APIConstants.AI.VECTOR_DB_PROVIDER_COLLECTION_NAME));
+
+            payload.put(APIConstants.AI.VECTOR_DB_PROVIDER_ZILLIZ_FILTER, filterExpr);
+
+            JSONArray dataArr = new JSONArray();
+            dataArr.put(embeddings);
+            payload.put(APIConstants.AI.VECTOR_DB_PROVIDER_ZILLIZ_DATA, dataArr);
+
+            payload.put(APIConstants.AI.VECTOR_DB_PROVIDER_ZILLIZ_ANNS_FIELD,
+                    APIConstants.AI.VECTOR_DB_PROVIDER_EMBEDDING);
+
+            Object outputFieldsObj = extraParams.get(APIConstants.AI.VECTOR_DB_PROVIDER_ZILLIZ_OUTPUT_FIELDS);
+            if (outputFieldsObj == null) {
+                throw new APIManagementException("Missing required extra param: 'output_fields'");
+            }
+            JSONArray outputFields = outputFieldsObj instanceof JSONArray
+                    ? (JSONArray) outputFieldsObj
+                    : new JSONArray(outputFieldsObj.toString());
+            if (outputFields == null) {
+                throw new APIManagementException("Missing required extra param: 'output_fields'");
+            }
+            payload.put(APIConstants.AI.VECTOR_DB_PROVIDER_ZILLIZ_OUTPUT_FIELDS, outputFields);
+            Object limit = extraParams.get("limit");
+            if (limit != null) {
+                payload.put(APIConstants.AI.VECTOR_DB_PROVIDER_ZILLIZ_LIMIT, limit);
+            }
+
+            // Optionally Set searchParams with metricType and params.radius (threshold)
+            JSONObject searchParams = new JSONObject();
+            JSONObject params = new JSONObject();
+            params.put(APIConstants.AI.VECTOR_DB_PROVIDER_ZILLIZ_METRIC_TYPE,
+                    APIConstants.AI.VECTOR_DB_PROVIDER_ZILLIZ_L2);
+            params.put(APIConstants.AI.VECTOR_DB_PROVIDER_ZILLIZ_RADIUS,
+                    extraParams.get(APIConstants.AI.VECTOR_DB_PROVIDER_THRESHOLD));
+            searchParams.put(APIConstants.AI.VECTOR_DB_PROVIDER_ZILLIZ_PARAMS, params);
+            payload.put(APIConstants.AI.VECTOR_DB_PROVIDER_ZILLIZ_SEARCH_PARAMS, searchParams);
+
+            try (CloseableHttpResponse retrieveResponse = invokeZillizAPI(queryUrl, token, payload.toString())) {
+
+                int responseStatusCode = retrieveResponse.getStatusLine().getStatusCode();
+                String responseString = EntityUtils.toString(retrieveResponse.getEntity());
+
+                if (responseStatusCode != HttpStatus.SC_OK) {
+                    throw new APIManagementException("Failed to query: " + responseString);
+                }
+
+                JSONObject respObj = new JSONObject(responseString);
+                JSONArray results = respObj.getJSONArray("data");
+                if (results == null || results.length() == 0) {
+                    log.debug("No similar responses found in Zilliz");
+                    return null;
+                }
+                return (T) results.toString();
+            }
+        } catch (IOException | org.json.JSONException e) {
+            log.error("Error retrieving response from Zilliz. Query URL: " + uri
+                    + APIConstants.AI.VECTOR_DB_PROVIDER_ZILLIZ_SEARCH_ENDPOINT
+                    + ", Collection: " + collectionName + ", Filter: " + filterExpr, e);
+            throw new APIManagementException("Error retrieving response from Zilliz (collection: " + collectionName +
+                    ", filter: " + filterExpr + "): " + e.getMessage(), e);
+        }
+    }
+
     // This method is used to invoke Zilliz API with the provided endpoint, token, and payload.
     private static CloseableHttpResponse invokeZillizAPI(String endpoint, String token, String payload)
             throws APIManagementException {
