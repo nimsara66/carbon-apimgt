@@ -389,35 +389,33 @@ public class ZillizVectorDBProviderServiceImpl implements VectorDBProviderServic
      * Retrieve the most similar response from the vector database.
      */
     @Override
-    public <T extends Serializable> T retrieve(double[] embeddings, String filterExpr, Map<String, Object> extraParams) throws APIManagementException {
+    public <T extends Serializable> T retrieve(double[] embeddings, String filterExpr, Map<String, Object> extraParams)
+            throws APIManagementException {
+        Object collectionName = extraParams.get(APIConstants.AI.VECTOR_DB_PROVIDER_COLLECTION_NAME);
         if (embeddings == null) {
-            throw new APIManagementException("Embeddings cannot be null");
+            throw new APIManagementException("Embeddings cannot be null.");
         }
-
+        if (collectionName == null || !(collectionName instanceof String) || ((String) collectionName).isEmpty()) {
+            throw new APIManagementException("Collection name must be a non-empty string provided in extraParams.");
+        }
         try {
             String queryUrl = uri + APIConstants.AI.VECTOR_DB_PROVIDER_ZILLIZ_SEARCH_ENDPOINT;
 
             JSONObject payload = new JSONObject();
-            payload.put(APIConstants.AI.VECTOR_DB_PROVIDER_COLLECTION_NAME, extraParams.get(APIConstants.AI.VECTOR_DB_PROVIDER_COLLECTION_NAME));
-
+            payload.put(APIConstants.AI.VECTOR_DB_PROVIDER_COLLECTION_NAME, collectionName);
             payload.put(APIConstants.AI.VECTOR_DB_PROVIDER_ZILLIZ_FILTER, filterExpr);
 
             JSONArray dataArr = new JSONArray();
             dataArr.put(embeddings);
             payload.put(APIConstants.AI.VECTOR_DB_PROVIDER_ZILLIZ_DATA, dataArr);
 
-            payload.put(APIConstants.AI.VECTOR_DB_PROVIDER_ZILLIZ_ANNS_FIELD,
-                    APIConstants.AI.VECTOR_DB_PROVIDER_EMBEDDING);
-
-            Object outputFieldsObj = extraParams.get(APIConstants.AI.VECTOR_DB_PROVIDER_ZILLIZ_OUTPUT_FIELDS);
-            if (outputFieldsObj == null) {
-                throw new APIManagementException("Missing required extra param: 'output_fields'");
+            Object annsField = extraParams.get(APIConstants.AI.VECTOR_DB_PROVIDER_ZILLIZ_ANNS_FIELD);
+            if (annsField != null) {
+                payload.put(APIConstants.AI.VECTOR_DB_PROVIDER_ZILLIZ_ANNS_FIELD, annsField.toString());
             }
-            JSONArray outputFields = outputFieldsObj instanceof JSONArray
-                    ? (JSONArray) outputFieldsObj
-                    : new JSONArray(outputFieldsObj.toString());
-            if (outputFields == null) {
-                throw new APIManagementException("Missing required extra param: 'output_fields'");
+            JSONArray outputFields = new JSONArray(extraParams.get(APIConstants.AI.VECTOR_DB_PROVIDER_ZILLIZ_OUTPUT_FIELDS).toString());
+            if (outputFields.length() == 0) {
+                outputFields.put("*");
             }
             payload.put(APIConstants.AI.VECTOR_DB_PROVIDER_ZILLIZ_OUTPUT_FIELDS, outputFields);
             Object limit = extraParams.get("limit");
@@ -429,7 +427,7 @@ public class ZillizVectorDBProviderServiceImpl implements VectorDBProviderServic
             JSONObject searchParams = new JSONObject();
             JSONObject params = new JSONObject();
             params.put(APIConstants.AI.VECTOR_DB_PROVIDER_ZILLIZ_METRIC_TYPE,
-                    APIConstants.AI.VECTOR_DB_PROVIDER_ZILLIZ_L2);
+                    extraParams.get(APIConstants.AI.VECTOR_DB_PROVIDER_ZILLIZ_METRIC_TYPE));
             params.put(APIConstants.AI.VECTOR_DB_PROVIDER_ZILLIZ_RADIUS,
                     extraParams.get(APIConstants.AI.VECTOR_DB_PROVIDER_THRESHOLD));
             searchParams.put(APIConstants.AI.VECTOR_DB_PROVIDER_ZILLIZ_PARAMS, params);

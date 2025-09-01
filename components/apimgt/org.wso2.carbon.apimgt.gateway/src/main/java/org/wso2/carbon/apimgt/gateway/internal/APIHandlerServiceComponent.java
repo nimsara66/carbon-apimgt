@@ -47,6 +47,7 @@ import org.wso2.carbon.apimgt.gateway.AzureOpenAIEmbeddingProviderServiceImpl;
 import org.wso2.carbon.apimgt.gateway.HybridThrottleProcessor;
 import org.wso2.carbon.apimgt.gateway.MistralEmbeddingProviderServiceImpl;
 import org.wso2.carbon.apimgt.gateway.OpenAIEmbeddingProviderServiceImpl;
+import org.wso2.carbon.apimgt.gateway.WSO2GuardrailProviderServiceImpl;
 import org.wso2.carbon.apimgt.gateway.ZillizVectorDBProviderServiceImpl;
 import org.wso2.carbon.apimgt.gateway.RedisBaseDistributedCountManager;
 import org.wso2.carbon.apimgt.gateway.handlers.security.keys.APIKeyValidatorClientPool;
@@ -196,6 +197,26 @@ public class APIHandlerServiceComponent {
                 context.getBundleContext().registerService(
                         GuardrailProviderService.class.getName(),
                         awsBedrockGuardrailProviderService,
+                        null
+                );
+            } catch (APIManagementException e) {
+                // TODO: Notify ACP
+                log.error("Error initializing AWS Bedrock Guardrail provider service", e);
+            }
+        }
+
+        // Register WSO2 guardrail services
+        GuardrailProviderConfigurationDTO wso2GuardrailDto =
+                ServiceReferenceHolder.getInstance().getAPIManagerConfiguration()
+                        .getGuardrailProvider(APIConstants.AI.GUARDRAIL_PROVIDER_WSO2_TYPE);
+        if (wso2GuardrailDto != null) {
+            try {
+                WSO2GuardrailProviderServiceImpl wso2GuardrailProviderService =
+                        new WSO2GuardrailProviderServiceImpl();
+                wso2GuardrailProviderService.init(wso2GuardrailDto);
+                context.getBundleContext().registerService(
+                        GuardrailProviderService.class.getName(),
+                        wso2GuardrailProviderService,
                         null
                 );
             } catch (APIManagementException e) {
