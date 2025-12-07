@@ -43,6 +43,8 @@ import org.apache.commons.io.Charsets;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
+import org.apache.http.HttpHeaders;
+import org.apache.http.HttpStatus;
 import org.apache.synapse.Mediator;
 import org.apache.synapse.SynapseConstants;
 import org.apache.synapse.commons.json.JsonUtil;
@@ -51,6 +53,7 @@ import org.apache.synapse.rest.RESTConstants;
 import org.apache.synapse.transport.nhttp.NhttpConstants;
 import org.apache.synapse.transport.passthru.PassThroughConstants;
 import org.apache.synapse.transport.passthru.Pipe;
+import org.apache.synapse.transport.passthru.util.RelayUtils;
 import org.wso2.carbon.apimgt.api.APIManagementException;
 import org.wso2.carbon.apimgt.api.ExceptionCodes;
 import org.wso2.carbon.apimgt.api.gateway.FailoverPolicyConfigDTO;
@@ -64,6 +67,7 @@ import org.wso2.carbon.apimgt.common.gateway.dto.JWTValidationInfo;
 import org.wso2.carbon.apimgt.gateway.APIMgtGatewayConstants;
 import org.wso2.carbon.apimgt.gateway.dto.IPRange;
 import org.wso2.carbon.apimgt.gateway.exception.OAuth2Exception;
+import org.wso2.carbon.apimgt.gateway.handlers.Utils;
 import org.wso2.carbon.apimgt.gateway.handlers.security.APIKeyValidator;
 import org.wso2.carbon.apimgt.gateway.handlers.security.APISecurityConstants;
 import org.wso2.carbon.apimgt.gateway.handlers.security.APISecurityException;
@@ -1859,5 +1863,85 @@ public class GatewayUtils {
             }
         }
         return false;
+    }
+
+    /**
+     * Handles authentication failures by setting appropriate error properties in the message context
+     * and sending a fault response.
+     *
+     * @param messageContext               The Synapse MessageContext.
+     * @param e                            The APISecurityException containing error details.
+     * @param authorizationHeader          The name of the authorization header.
+     * @param apiKeyHeader                 The name of the API key header.
+     * @param authenticatorsChallengeString The challenge string for authenticators.
+     */
+    public static void handleAuthFailure(org.apache.synapse.MessageContext messageContext, APISecurityException e,
+            String authorizationHeader, String apiKeyHeader, String authenticatorsChallengeString) {
+        messageContext.setProperty(SynapseConstants.ERROR_CODE, e.getErrorCode());
+        messageContext.setProperty(SynapseConstants.ERROR_MESSAGE,
+                APISecurityConstants.getAuthenticationFailureMessage(e.getErrorCode()));
+        messageContext.setProperty(SynapseConstants.ERROR_EXCEPTION, e);
+
+        Mediator sequence = messageContext.getSequence(APISecurityConstants.API_AUTH_FAILURE_HANDLER);
+
+        //Setting error description which will be available to the handler
+        String errorDetail = APISecurityConstants.getFailureMessageDetailDescription(e.getErrorCode(), e.getMessage());
+        // if custom auth header is configured, the error message should specify its name instead of default value
+        if (e.getErrorCode() == APISecurityConstants.API_AUTH_MISSING_CREDENTIALS) {
+            errorDetail =
+                    APISecurityConstants.getFailureMessageDetailDescription(e.getErrorCode(), e.getMessage()) + "'"
+                            + authorizationHeader + " : Bearer ACCESS_TOKEN' or '" + authorizationHeader +
+                            " : Basic ACCESS_TOKEN' or '" + apiKeyHeader + " : API_KEY'";
+        }
+        messageContext.setProperty(SynapseConstants.ERROR_DETAIL, errorDetail);
+
+        // By default we send a 401 response back
+        org.apache.axis2.context.MessageContext axis2MC = ((Axis2MessageContext) messageContext).
+                getAxis2MessageContext();
+        // This property need to be set to avoid sending the content in pass-through pipe (request message)
+        // as the response.
+        axis2MC.setProperty(PassThroughConstants.MESSAGE_BUILDER_INVOKED, Boolean.TRUE);
+        try {
+            RelayUtils.consumeAndDiscardMessage(axis2MC);
+        } catch (AxisFault axisFault) {
+            //In case of an error it is logged and the process is continued because we're setting a fault message in the payload.
+            log.error("Error occurred while consuming and discarding the message", axisFault);
+        }
+        axis2MC.setProperty(Constants.Configuration.MESSAGE_TYPE, "application/soap+xml");
+        int status;
+        if (e.getErrorCode() == APISecurityConstants.API_AUTH_GENERAL_ERROR ||
+                e.getErrorCode() == APISecurityConstants.API_AUTH_MISSING_OPEN_API_DEF) {
+            status = HttpStatus.SC_INTERNAL_SERVER_ERROR;
+        } else if (e.getErrorCode() == APISecurityConstants.API_AUTH_INCORRECT_API_RESOURCE ||
+                e.getErrorCode() == APISecurityConstants.API_AUTH_FORBIDDEN ||
+                e.getErrorCode() == APISecurityConstants.API_OAUTH_INVALID_AUDIENCES ||
+                e.getErrorCode() == APISecurityConstants.INVALID_SCOPE) {
+            status = HttpStatus.SC_FORBIDDEN;
+        } else {
+            status = HttpStatus.SC_UNAUTHORIZED;
+            Map<String, String> headers =
+                    (Map) axis2MC.getProperty(org.apache.axis2.context.MessageContext.TRANSPORT_HEADERS);
+            if (headers != null) {
+                headers.put(HttpHeaders.WWW_AUTHENTICATE, authenticatorsChallengeString +
+                        " error=\"invalid_token\"" +
+                        ", error_description=\"The provided token is invalid\"");
+                axis2MC.setProperty(org.apache.axis2.context.MessageContext.TRANSPORT_HEADERS, headers);
+            }
+        }
+
+        messageContext.setProperty(APIMgtGatewayConstants.HTTP_RESPONSE_STATUS_CODE, status);
+
+        // Invoke the custom error handler specified by the user
+        if (sequence != null && !sequence.mediate(messageContext)) {
+            // If needed user should be able to prevent the rest of the fault handling
+            // logic from getting executed
+            return;
+        }
+
+        sendFault(messageContext, status);
+    }
+
+    protected static void sendFault(org.apache.synapse.MessageContext messageContext, int status) {
+        Utils.sendFault(messageContext, status);
     }
 }
