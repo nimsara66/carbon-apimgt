@@ -5433,7 +5433,7 @@ public class ApiMgtDAO {
             identifier = apiTypeWrapper.getApi().getId();
             apiUUID = apiTypeWrapper.getApi().getUuid();
             if (apiUUID != null) {
-                id = getAPIID(apiUUID);
+                id = getAPIID(apiUUID, connection);
             }
             if (id == -1) {
                 id = identifier.getId();
@@ -6156,6 +6156,30 @@ public class ApiMgtDAO {
             handleException("Error while getting default version for " + apiId.getName(), e);
         } finally {
             APIMgtDBUtil.closeAllConnections(prepStmt, connection, rs);
+        }
+        return publishedDefaultVersion;
+    }
+
+    /**
+     * Get published default version using existing connection for APIIdentifier.
+     *
+     * @param connection        Existing database connection
+     * @param apiId             API identifier
+     * @return                  Published default version string
+     * @throws SQLException     If an error occurs while accessing the database
+     */
+    private String getPublishedDefaultVersion(APIIdentifier apiId, Connection connection) throws SQLException {
+
+        String publishedDefaultVersion = null;
+        String query = SQLConstants.GET_PUBLISHED_DEFAULT_VERSION_SQL;
+        try (PreparedStatement prepStmt = connection.prepareStatement(query)) {
+            prepStmt.setString(1, apiId.getName());
+            prepStmt.setString(2, APIUtil.replaceEmailDomainBack(apiId.getProviderName()));
+            try (ResultSet rs = prepStmt.executeQuery()) {
+                while (rs.next()) {
+                    publishedDefaultVersion = rs.getString("PUBLISHED_DEFAULT_API_VERSION");
+                }
+            }
         }
         return publishedDefaultVersion;
     }
@@ -7597,8 +7621,8 @@ public class ApiMgtDAO {
             prepStmt.execute();
             prepStmt.close();//If exception occurs at execute, this statement will close in finally else here
 
-            String curDefaultVersion = getDefaultVersion(identifier);
-            String pubDefaultVersion = getPublishedDefaultVersion(identifier);
+            String curDefaultVersion = getDefaultVersion(connection, identifier);
+            String pubDefaultVersion = getPublishedDefaultVersion(identifier, connection);
             if (identifier.getVersion().equals(curDefaultVersion)) {
                 ArrayList<Identifier> apiIdList = new ArrayList<Identifier>() {{
                     add(identifier);
@@ -15631,12 +15655,11 @@ public class ApiMgtDAO {
             } catch (IOException e) {
                 log.error("Error while retrieving LLM configuration", e);
             }
-
-            // Get models registered under the LLM provider
-            setLLMProviderModels(organization, provider);
-
-            return provider;
         }
+        // Get models registered under the LLM provider
+        setLLMProviderModels(organization, provider);
+
+        return provider;
     }
 
     /**
@@ -16999,10 +17022,10 @@ public class ApiMgtDAO {
         PreparedStatement ps = null;
         Connection connection = null;
         try {
+            int id = getAPIProductId(productIdentifier);
             connection = APIMgtDBUtil.getConnection();
             connection.setAutoCommit(false);
             //  delete product ratings
-            int id = getAPIProductId(productIdentifier);
             ps = connection.prepareStatement(deleteRatingsQuery);
             ps.setInt(1, id);
             ps.execute();
@@ -17023,7 +17046,7 @@ public class ApiMgtDAO {
             deleteAllAPISpecificOperationPoliciesByAPIUUID(connection, productIdentifier.getUUID(), null);
 
             // delete the default version if the deleted product is a default version
-            String curDefaultVersion = getDefaultVersion(productIdentifier);
+            String curDefaultVersion = getDefaultVersion(connection, productIdentifier);
             String pubDefaultVersion = getPublishedDefaultVersion(productIdentifier, connection);
             if (productIdentifier.getVersion().equals(curDefaultVersion)) {
                 ArrayList<Identifier> apiIdList = new ArrayList<Identifier>() {{
@@ -17128,7 +17151,7 @@ public class ApiMgtDAO {
             int productId = getAPIID(product.getUuid(), conn);
             updateAPIProductResourceMappings(product, productId, conn);
 
-            String previousDefaultVersion = getDefaultVersion(product.getId());
+            String previousDefaultVersion = getDefaultVersion(conn, product.getId());
             if (product.isDefaultVersion() ^ product.getId().getVersion().equals(previousDefaultVersion)) {
                 //If the api product is selected as default version, it is added/replaced into AM_API_DEFAULT_VERSION table
                 if (product.isDefaultVersion()) {
@@ -23796,7 +23819,7 @@ public class ApiMgtDAO {
         }
 
         try (PreparedStatement ps = connection.prepareStatement(query)) {
-            int apiId = getAPIID(currentApiUuid);
+            int apiId = getAPIID(currentApiUuid, connection);
             ps.setInt(1, apiId);
             if (isRevision) {
                 ps.setString(2, uuid);
@@ -23839,7 +23862,7 @@ public class ApiMgtDAO {
             currentApiUuid = uuid;
         }
         try (PreparedStatement ps = connection.prepareStatement(query)) {
-            int apiId = getAPIID(currentApiUuid);
+            int apiId = getAPIID(currentApiUuid, connection);
             ps.setInt(1, apiId);
             if (isRevision) {
                 ps.setString(2, uuid);
