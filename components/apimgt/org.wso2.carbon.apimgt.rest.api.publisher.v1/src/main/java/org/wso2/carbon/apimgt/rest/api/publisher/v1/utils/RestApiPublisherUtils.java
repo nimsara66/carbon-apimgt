@@ -93,7 +93,7 @@ public class RestApiPublisherUtils {
     private static final Log log = LogFactory.getLog(RestApiPublisherUtils.class);
 
     /**
-     * Attaches a file to the specified document
+     * Attaches a file to the specified document.
      *
      * @param apiId         identifier of the API, the document belongs to
      * @param documentation Documentation object
