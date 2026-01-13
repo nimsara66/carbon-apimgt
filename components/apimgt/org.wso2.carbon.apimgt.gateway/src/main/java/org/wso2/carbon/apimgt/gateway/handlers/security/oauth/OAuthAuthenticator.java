@@ -241,9 +241,9 @@ public class OAuthAuthenticator implements Authenticator {
             //Initial guess of a JWT token using the presence of a DOT.
             if (StringUtils.isNotEmpty(accessToken) && accessToken.contains(APIConstants.DOT)) {
                 try {
-                    String[] JWTElements = accessToken.split("\\.");
+                    String[] jwtElements = accessToken.split("\\.");
 
-                    if (JWTElements.length <= 3) {
+                    if (jwtElements.length == 3) {
                         signedJWTInfo = getSignedJwt(accessToken);
                         if (GatewayUtils.isInternalKey(signedJWTInfo.getJwtClaimsSet())
                                 || GatewayUtils.isAPIKey(signedJWTInfo.getJwtClaimsSet())) {
@@ -256,12 +256,12 @@ public class OAuthAuthenticator implements Authenticator {
                                 .getKeyManagerNameIfJwtValidatorExist(signedJWTInfo);
                         if (StringUtils.isNotEmpty(keyManager)) {
                             if (log.isDebugEnabled()) {
-                                log.debug("KeyManager " + keyManager + "found for authenticate token " + GatewayUtils.getMaskedToken(accessToken));
+                                log.debug("KeyManager " + keyManager + " found for authenticate token " + GatewayUtils.getMaskedToken(accessToken));
                             }
                             if (keyManagerList.contains(APIConstants.KeyManager.API_LEVEL_ALL_KEY_MANAGERS) ||
                                     keyManagerList.contains(keyManager)) {
                                 if (log.isDebugEnabled()) {
-                                    log.debug("Elected KeyManager " + keyManager + "found in API level list " + String.join(",", keyManagerList));
+                                    log.debug("Elected KeyManager " + keyManager + " found in API level list " + String.join(",", keyManagerList));
                                 }
                                 isJwtToken = true;
                             } else {
@@ -281,7 +281,7 @@ public class OAuthAuthenticator implements Authenticator {
                 } catch ( ParseException | IllegalArgumentException e) {
                     log.debug("Not a JWT token. Failed to decode the token header.", e);
                 } catch (APIManagementException e) {
-                    log.error("error while check validation of JWt", e);
+                    log.error("Error while validating JWT token.", e);
                     return new AuthenticationResponse(false, isMandatory, true,
                             APISecurityConstants.API_AUTH_INVALID_CREDENTIALS,
                             APISecurityConstants.API_AUTH_INVALID_CREDENTIALS_MESSAGE);
