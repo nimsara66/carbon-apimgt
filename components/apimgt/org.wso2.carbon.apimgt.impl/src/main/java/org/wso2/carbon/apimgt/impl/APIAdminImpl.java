@@ -1742,15 +1742,17 @@ public class APIAdminImpl implements APIAdmin {
     private void maskValues(KeyManagerConfigurationDTO keyManagerConfigurationDTO) {
         KeyManagerConnectorConfiguration keyManagerConnectorConfiguration = ServiceReferenceHolder.getInstance()
                 .getKeyManagerConnectorConfiguration(keyManagerConfigurationDTO.getType());
-        // When the KM is used for Token Exchange,there won't be any connection configurations to mask.
+        // When the Other KM is used for Token Exchange, there won't be any connection configurations to mask.
         if (keyManagerConnectorConfiguration != null) {
             Map<String, Object> additionalProperties = keyManagerConfigurationDTO.getAdditionalProperties();
             List<ConfigurationDto> connectionConfigurations =
                     keyManagerConnectorConfiguration.getConnectionConfigurations();
-            for (ConfigurationDto connectionConfiguration : connectionConfigurations) {
-                if (connectionConfiguration.isMask()) {
-                    additionalProperties.replace(connectionConfiguration.getName(),
-                            APIConstants.DEFAULT_MODIFIED_ENDPOINT_PASSWORD);
+            if (connectionConfigurations != null && !connectionConfigurations.isEmpty()) {
+                for (ConfigurationDto connectionConfiguration : connectionConfigurations) {
+                    if (connectionConfiguration.isMask()) {
+                        additionalProperties.replace(connectionConfiguration.getName(),
+                                APIConstants.DEFAULT_MODIFIED_ENDPOINT_PASSWORD);
+                    }
                 }
             }
 
@@ -1758,9 +1760,11 @@ public class APIAdminImpl implements APIAdmin {
             if (keyManagerConnectorConfiguration.getAuthConfigurations() != null
                     && !(keyManagerConnectorConfiguration.getAuthConfigurations().isEmpty())) {
                 List<ConfigurationDto> authConfigurations = keyManagerConnectorConfiguration.getAuthConfigurations();
-                // Recursively check nested objects in authConfigurations and apply masking
-                for (ConfigurationDto authConfiguration : authConfigurations) {
-                    applyMaskToNestedFields(authConfiguration.getValues(), additionalProperties);
+                if (authConfigurations != null && !authConfigurations.isEmpty()) {
+                    // Recursively check nested objects in authConfigurations and apply masking
+                    for (ConfigurationDto authConfiguration : authConfigurations) {
+                        applyMaskToNestedFields(authConfiguration.getValues(), additionalProperties);
+                    }
                 }
             }
         }
