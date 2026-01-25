@@ -2111,7 +2111,7 @@ public interface APIProvider extends APIManager {
      * @param isInitiatedFromGateway whether the deployment is initiated from the gateway
      */
     void resumeDeployedAPIRevision(String apiId, String organization, String revisionUUID, String revisionId,
-                                   String environment, boolean isInitiatedFromGateway);
+                                   String environment, boolean isInitiatedFromGateway) throws APIManagementException;
 
     /***
      * Cleanup pending or rejected revision workflows
