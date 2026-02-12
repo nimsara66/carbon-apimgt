@@ -108,6 +108,11 @@ public class HttpClientConfigurationDTO {
         private HostnameVerifier hostnameVerifier;
 
         public Builder withConnectionParams(int connectionLimit, int maximumConnectionsPerRoute,
+                int connectionTimeout) {
+            return withConnectionParams(connectionLimit, maximumConnectionsPerRoute, connectionTimeout, -1);
+        }
+        
+        public Builder withConnectionParams(int connectionLimit, int maximumConnectionsPerRoute,
                 int connectionTimeout, int connectionRequestTimeout) {
             this.connectionLimit = connectionLimit;
             this.maximumConnectionsPerRoute = maximumConnectionsPerRoute;
