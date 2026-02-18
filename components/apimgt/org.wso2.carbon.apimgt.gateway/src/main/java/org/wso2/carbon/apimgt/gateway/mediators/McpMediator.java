@@ -374,6 +374,7 @@ public class McpMediator extends AbstractMediator implements ManagedLifecycle {
                 }
             }
         }
+        allScopes.add("default");
         return allScopes;
     }
 }
