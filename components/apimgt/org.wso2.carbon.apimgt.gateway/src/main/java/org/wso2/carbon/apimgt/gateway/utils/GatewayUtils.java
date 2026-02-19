@@ -136,7 +136,7 @@ public class GatewayUtils {
     private static final String HTTP_SC_DESC = "HTTP_SC_DESC";
     private static final Gson gson = new Gson();
     private static String apiUUID;
-    private static final String apiType = String.valueOf(APIConstants.ApiTypes.API);
+    private static String apiType;
     private static final Pattern validHostHeaderPattern =
             Pattern.compile("^[A-Za-z0-9][A-Za-z0-9.-]*(:\\d{1,5})?$");
 
@@ -1931,7 +1931,7 @@ public class GatewayUtils {
                 if (APIConstants.API_TYPE_MCP.equalsIgnoreCase(apiType)) {
                     String contextPath = (String) messageContext.getProperty(RESTConstants.REST_API_CONTEXT);
                     if (StringUtils.isEmpty(contextPath)) {
-                        headers.put(HttpHeaders.WWW_AUTHENTICATE, APIAuthenticationHandler.getAuthenticatorsChallengeString() +
+                        headers.put(HttpHeaders.WWW_AUTHENTICATE, authenticatorsChallengeString +
                                 " error=\"invalid_token\"" +
                                 ", error_description=\"The provided token is invalid\"");
                     } else {
@@ -1956,7 +1956,7 @@ public class GatewayUtils {
                         headers.put(HttpHeaders.WWW_AUTHENTICATE, wwwAuthenticate);
                     }
                 } else {
-                    headers.put(HttpHeaders.WWW_AUTHENTICATE, APIAuthenticationHandler.getAuthenticatorsChallengeString() +
+                    headers.put(HttpHeaders.WWW_AUTHENTICATE, authenticatorsChallengeString +
                             " error=\"invalid_token\"" +
                             ", error_description=\"The provided token is invalid\"");
                 }
