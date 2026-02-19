@@ -381,7 +381,7 @@ public class McpMediator extends AbstractMediator implements ManagedLifecycle {
 
             if (keyManagers != null && !keyManagers.isEmpty()) {
                 if (APIConstants.KeyManager.API_LEVEL_ALL_KEY_MANAGERS.equals(keyManagers.get(0))
-                        || keyManagers.contains("Resident Key Manager")) {
+                        || keyManagers.contains(APIConstants.KeyManager.DEFAULT_KEY_MANAGER)) {
                     allScopes.add("default");
                 }
             }
