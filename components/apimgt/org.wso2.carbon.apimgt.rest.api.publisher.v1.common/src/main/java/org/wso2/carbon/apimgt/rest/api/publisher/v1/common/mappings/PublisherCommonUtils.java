@@ -365,37 +365,18 @@ public class PublisherCommonUtils {
      * @param api           API of the Custom Backend
      * @param apiProvider   API Provider
      * @param endpointType  Endpoint Type of the Custom Backend (SANDBOX, PRODUCTION)
-     * @param customBackend Custom Backend
-     * @param contentDecomp Header Content of the Request
-     * @throws APIManagementException If an error occurs while updating the API and API definition
+     * @param customBackendContent Custom Backend content
+     * @param fileName      fileName of the sequence file
+     * @throws APIManagementException If an error occurs while updating the sequence backend
      */
     public static void updateCustomBackend(API api, APIProvider apiProvider, String endpointType,
-                                           InputStream customBackend, String contentDecomp)
-            throws APIManagementException {
-        String fileName = getFileNameFromContentDisposition(contentDecomp);
+            String customBackendContent, String fileName) throws APIManagementException {
         if (fileName == null) {
             throw new APIManagementException(
-                    "Error when retrieving Custom Backend file name of API: " + api.getId().getApiName());
+                    "Error when retrieving sequence backend file name of API: " + api.getId().getApiName());
         }
         String customBackendUUID = UUID.randomUUID().toString();
-        try {
-            String customBackendStr = IOUtils.toString(customBackend);
-            apiProvider.updateCustomBackend(api.getUuid(), endpointType, customBackendStr, fileName, customBackendUUID);
-        } catch (IOException ex) {
-            throw new APIManagementException("Error retrieving sequence backend of API: " + api.getUuid(), ex);
-        }
-    }
-
-    private static String getFileNameFromContentDisposition(String contentDisposition) {
-        // Split the Content-Disposition header to get the file name
-        String[] parts = contentDisposition.split(";");
-        for (String part : parts) {
-            if (part.trim().startsWith("filename")) {
-                // Extract the file name value
-                return part.split("=")[1].trim().replace("\"", "");
-            }
-        }
-        return null;
+        apiProvider.updateCustomBackend(api.getUuid(), endpointType, customBackendContent, fileName, customBackendUUID);
     }
 
     /**

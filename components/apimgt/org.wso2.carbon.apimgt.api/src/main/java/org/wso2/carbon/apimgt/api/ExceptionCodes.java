@@ -578,6 +578,8 @@ public enum ExceptionCodes implements ErrorHandler {
             "Requested api policy with id '%s' not found"),
     CUSTOM_BACKEND_NOT_FOUND(903250, "Sequence Backend not found",
             404, "Requested Sequence Backend of API '%s' not found"),
+    CUSTOM_BACKEND_CONTENT_ERROR(903251, "Sequence Backend content error",
+            500, "Error while retrieving sequence backend content of API '%s'"),
 
     OPERATION_POLICY_ALREADY_EXISTS(903001, "The API Policy already exists.", 409, "An Operation Policy with name '%s' and version '%s' already exists"),
 

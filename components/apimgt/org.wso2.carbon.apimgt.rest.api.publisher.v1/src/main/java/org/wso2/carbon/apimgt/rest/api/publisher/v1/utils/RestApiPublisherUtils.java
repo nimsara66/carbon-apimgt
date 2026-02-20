@@ -54,6 +54,7 @@ import org.wso2.carbon.apimgt.impl.importexport.ImportExportConstants;
 import org.wso2.carbon.apimgt.impl.importexport.utils.CommonUtil;
 import org.wso2.carbon.apimgt.impl.restapi.publisher.ApisApiServiceImplUtils;
 import org.wso2.carbon.apimgt.impl.utils.APIUtil;
+import org.wso2.carbon.apimgt.impl.utils.APIFileUtil;
 import org.wso2.carbon.apimgt.rest.api.common.RestApiCommonUtil;
 import org.wso2.carbon.apimgt.rest.api.common.RestApiConstants;
 import org.wso2.carbon.apimgt.rest.api.common.dto.ErrorDTO;
@@ -242,14 +243,16 @@ public class RestApiPublisherUtils {
      *
      * @param xmlContent string of xml content
      * @return true if the xml content is valid, false otherwise
-     * @throws APIManagementException
+     * @throws APIManagementException if an error occurs while parsing the xml content
      */
     public static boolean validateXMLSchema(String xmlContent) throws APIManagementException {
-        xmlContent = "<xml>" + xmlContent + "</xml>";
-        DocumentBuilderFactory factory = APIUtil.getSecuredDocumentBuilder();
-        factory.setValidating(false);
-        factory.setNamespaceAware(false);
         try {
+            DocumentBuilderFactory factory = APIUtil.getSecuredDocumentBuilder();
+            factory.setValidating(false);
+            factory.setNamespaceAware(false);
+            // Remove BOM and XML declaration if present
+            xmlContent = xmlContent.replaceFirst("^\\uFEFF", "");
+            xmlContent = xmlContent.replaceFirst("<\\?xml.*?\\?>", "").trim();
             DocumentBuilder builder = factory.newDocumentBuilder();
             builder.parse(new InputSource(new StringReader(xmlContent)));
         } catch (ParserConfigurationException | IOException | SAXException e) {
@@ -308,17 +311,27 @@ public class RestApiPublisherUtils {
     }
 
     public static File exportCustomBackendData(String seq, String seqName) throws APIManagementException {
+        File tempDir = null;
+        boolean preventDeletion = false;
         try {
-            // Provided Sequence Name by the user
-            String customBackendName = seqName;
-            if (!customBackendName.contains(".xml")) {
-                customBackendName = seqName + APIConstants.SYNAPSE_POLICY_DEFINITION_EXTENSION_XML;
+            tempDir = CommonUtil.createTempDirectory(null);
+            Path resolvedPath = resolveFilePath(tempDir.getAbsolutePath(), seqName);
+            if (seqName.endsWith(APIConstants.SYNAPSE_POLICY_DEFINITION_EXTENSION_XML) && validateXMLSchema(seq)) {
+                CommonUtil.writeFile(resolvedPath.toString(), seq);
+                preventDeletion = true;
+                return new File(resolvedPath.toString());
+            } else {
+                FileUtils.deleteQuietly(tempDir);
+                RestApiUtil.handleInternalServerError("Retrieved sequence content is not a valid XML file", log);
             }
-            CommonUtil.writeFile(customBackendName, seq);
-            return new File(customBackendName);
-        } catch (APIImportExportException ex) {
-            throw new APIManagementException("Error when exporting Custom Backend: " + seqName, ex);
+        } catch (APIImportExportException e) {
+            throw new APIManagementException("Error while exporting custom backend sequence " + seqName, e);
+        } finally {
+            if (!preventDeletion && tempDir != null) {
+                FileUtils.deleteQuietly(tempDir);
+            }
         }
+        return null;
     }
 
     public static File exportOperationPolicyData(OperationPolicyData policyData, String format)
@@ -513,7 +526,7 @@ public class RestApiPublisherUtils {
      * @throws APIManagementException if resolution fails.
      */
     private static Path resolveFilePath(final String baseDirPathString,
-                                        final String userPathString) throws APIManagementException {
+            final String userPathString) throws APIManagementException {
         Path baseDirPath = Paths.get(baseDirPathString);
         Path userPath = Paths.get(userPathString);
         if (!baseDirPath.isAbsolute()) {
@@ -807,6 +820,34 @@ public class RestApiPublisherUtils {
 
         if (StringUtils.isNotBlank(msg)) {
             RestApiUtil.handleBadRequest(msg, log);
+        }
+    }
+
+    /**
+     * This method will attach the given sequence to the relevant API as a custom backend and update the relevant API
+     *
+     * @param api                 API object to which the sequence should be attached
+     * @param apiProvider         APIProvider instance to be used for updating the API with the custom
+     * @param endpointType        Type of the endpoint (production/sandbox) to which the custom backend is attached
+     * @param customBackend       InputStream of the sequence to be attached as the custom backend
+     * @param customBackendDetail Attachment containing details of the sequence to be attached as the custom backend
+     */
+    public static void attachSequenceToSequenceBackend(API api, APIProvider apiProvider, String endpointType,
+            InputStream customBackend, Attachment customBackendDetail) throws APIManagementException {
+
+        String apiId = api.getUuid();
+        try {
+            String customBackendContent = readInputStream(customBackend, customBackendDetail);
+            String fileName = customBackendDetail.getDataHandler().getName();
+            if (fileName.endsWith(APIConstants.SYNAPSE_POLICY_DEFINITION_EXTENSION_XML) && validateXMLSchema(
+                    customBackendContent)) {
+                PublisherCommonUtils.updateCustomBackend(api, apiProvider, endpointType, customBackendContent,
+                        fileName);
+            } else {
+                RestApiUtil.handleBadRequest("Provided sequence content is not a valid XML file", log);
+            }
+        } catch (IOException e) {
+            RestApiUtil.handleInternalServerError("Error processing file upload for sequence: " + apiId, e, log);
         }
     }
 }

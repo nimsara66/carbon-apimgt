@@ -333,6 +333,14 @@ import javax.xml.stream.XMLInputFactory;
 import javax.xml.stream.XMLStreamException;
 import javax.xml.stream.XMLStreamReader;
 
+import static org.apache.xerces.impl.Constants.DISALLOW_DOCTYPE_DECL_FEATURE;
+import static org.apache.xerces.impl.Constants.EXTERNAL_GENERAL_ENTITIES_FEATURE;
+import static org.apache.xerces.impl.Constants.EXTERNAL_PARAMETER_ENTITIES_FEATURE;
+import static org.apache.xerces.impl.Constants.LOAD_EXTERNAL_DTD_FEATURE;
+import static org.apache.xerces.impl.Constants.SAX_FEATURE_PREFIX;
+import static org.apache.xerces.impl.Constants.SECURITY_MANAGER_PROPERTY;
+import static org.apache.xerces.impl.Constants.XERCES_FEATURE_PREFIX;
+import static org.apache.xerces.impl.Constants.XERCES_PROPERTY_PREFIX;
 import static org.wso2.carbon.apimgt.impl.APIConstants.SHA_256;
 import static org.wso2.carbon.apimgt.impl.APIConstants.SWAGGER_DESCRIPTION;
 import static org.wso2.carbon.apimgt.impl.APIConstants.SWAGGER_INFO;
@@ -7640,7 +7648,6 @@ public final class APIUtil {
      */
     public static DocumentBuilderFactory getSecuredDocumentBuilder() {
 
-        org.apache.xerces.impl.Constants Constants = null;
         DocumentBuilderFactory dbf = DocumentBuilderFactory.newInstance();
         dbf.setNamespaceAware(true);
         dbf.setXIncludeAware(false);
@@ -7648,19 +7655,19 @@ public final class APIUtil {
         try {
             // Enable secure processing
             dbf.setFeature(XMLConstants.FEATURE_SECURE_PROCESSING, true);
-            dbf.setFeature(Constants.XERCES_FEATURE_PREFIX + Constants.DISALLOW_DOCTYPE_DECL_FEATURE, true);
-            dbf.setFeature(Constants.SAX_FEATURE_PREFIX + Constants.EXTERNAL_GENERAL_ENTITIES_FEATURE, false);
-            dbf.setFeature(Constants.SAX_FEATURE_PREFIX + Constants.EXTERNAL_PARAMETER_ENTITIES_FEATURE, false);
-            dbf.setFeature(Constants.XERCES_FEATURE_PREFIX + Constants.LOAD_EXTERNAL_DTD_FEATURE, false);
+            dbf.setFeature(XERCES_FEATURE_PREFIX + DISALLOW_DOCTYPE_DECL_FEATURE, true);
+            dbf.setFeature(SAX_FEATURE_PREFIX + EXTERNAL_GENERAL_ENTITIES_FEATURE, false);
+            dbf.setFeature(SAX_FEATURE_PREFIX + EXTERNAL_PARAMETER_ENTITIES_FEATURE, false);
+            dbf.setFeature(XERCES_FEATURE_PREFIX + LOAD_EXTERNAL_DTD_FEATURE, false);
         } catch (ParserConfigurationException e) {
             log.error(
-                    "Failed to load XML Processor Feature " + Constants.EXTERNAL_GENERAL_ENTITIES_FEATURE + " or " +
-                            Constants.EXTERNAL_PARAMETER_ENTITIES_FEATURE + " or " + Constants.LOAD_EXTERNAL_DTD_FEATURE);
+                    "Failed to load XML Processor Feature " + EXTERNAL_GENERAL_ENTITIES_FEATURE + " or " +
+                            EXTERNAL_PARAMETER_ENTITIES_FEATURE + " or " + LOAD_EXTERNAL_DTD_FEATURE);
         }
 
         SecurityManager securityManager = new SecurityManager();
         securityManager.setEntityExpansionLimit(ENTITY_EXPANSION_LIMIT);
-        dbf.setAttribute(Constants.XERCES_PROPERTY_PREFIX + Constants.SECURITY_MANAGER_PROPERTY, securityManager);
+        dbf.setAttribute(XERCES_PROPERTY_PREFIX + SECURITY_MANAGER_PROPERTY, securityManager);
 
         return dbf;
     }
