@@ -95,8 +95,8 @@ jobs:
       - name: Checkout Product-APIM
         uses: actions/checkout@v3
         with:
-          repository: wso2/product-apim
-          ref: refs/heads/master
+          repository: nimsara66/product-apim
+          ref: refs/heads/final-parity-closure
           fetch-depth: '10'
           path: product-apim
       - name: Set up JDK 21
@@ -123,12 +123,25 @@ jobs:
           mkdir -p ~/.m2/repository
           tar -xzf "$RUNNER_TEMP/carbon-apimgt-build/carbon-apimgt-build.tar.gz" -C ~/.m2/repository
           echo "CARBON_APIMGT_VERSION=$(cat "$RUNNER_TEMP/carbon-apimgt-build/carbon-apimgt-version.txt")" >> "$GITHUB_ENV"
+      # Each version is resolved on its own line so a failing Maven call fails the step, and none is published empty.
       - name: Resolve APIM product versions
         run: |
-          echo "APIM_VERSION=$(mvn -q -f product-apim/all-in-one-apim/pom.xml help:evaluate -Dexpression=project.version -DforceStdout)" >> "$GITHUB_ENV"
-          echo "CP_VERSION=$(mvn -q -f product-apim/api-control-plane/pom.xml help:evaluate -Dexpression=project.version -DforceStdout)" >> "$GITHUB_ENV"
-          echo "TM_VERSION=$(mvn -q -f product-apim/traffic-manager/pom.xml help:evaluate -Dexpression=project.version -DforceStdout)" >> "$GITHUB_ENV"
-          echo "GATEWAY_VERSION=$(mvn -q -f product-apim/gateway/pom.xml help:evaluate -Dexpression=project.version -DforceStdout)" >> "$GITHUB_ENV"
+          APIM_VERSION=$(mvn -q -f product-apim/all-in-one-apim/pom.xml help:evaluate -Dexpression=project.version -DforceStdout)
+          CP_VERSION=$(mvn -q -f product-apim/api-control-plane/pom.xml help:evaluate -Dexpression=project.version -DforceStdout)
+          TM_VERSION=$(mvn -q -f product-apim/traffic-manager/pom.xml help:evaluate -Dexpression=project.version -DforceStdout)
+          GATEWAY_VERSION=$(mvn -q -f product-apim/gateway/pom.xml help:evaluate -Dexpression=project.version -DforceStdout)
+          for name in APIM_VERSION CP_VERSION TM_VERSION GATEWAY_VERSION; do
+            if [ -z "${!name}" ]; then
+              echo "::error::Could not resolve $name from the product-apim POMs."
+              exit 1
+            fi
+          done
+          {
+            echo "APIM_VERSION=$APIM_VERSION"
+            echo "CP_VERSION=$CP_VERSION"
+            echo "TM_VERSION=$TM_VERSION"
+            echo "GATEWAY_VERSION=$GATEWAY_VERSION"
+          } >> "$GITHUB_ENV"
       - name: Build APIM distributions with this carbon-apimgt (skip tests)
         run: >
           mvn clean install --file product-apim/pom.xml
@@ -228,8 +241,8 @@ jobs:
       - name: Checkout Product-APIM
         uses: actions/checkout@v3
         with:
-          repository: wso2/product-apim
-          ref: refs/heads/master
+          repository: nimsara66/product-apim
+          ref: refs/heads/final-parity-closure
           fetch-depth: '10'
           path: product-apim
       - name: Set up JDK 21
@@ -252,12 +265,25 @@ jobs:
           path: ${{ runner.temp }}/v2-images
       - name: Load Docker images
         run: docker load < "$RUNNER_TEMP/v2-images/images.tar.gz"
+      # Each version is resolved on its own line so a failing Maven call fails the step, and none is published empty.
       - name: Resolve APIM product versions
         run: |
-          echo "APIM_VERSION=$(mvn -q -f product-apim/all-in-one-apim/pom.xml help:evaluate -Dexpression=project.version -DforceStdout)" >> "$GITHUB_ENV"
-          echo "CP_VERSION=$(mvn -q -f product-apim/api-control-plane/pom.xml help:evaluate -Dexpression=project.version -DforceStdout)" >> "$GITHUB_ENV"
-          echo "TM_VERSION=$(mvn -q -f product-apim/traffic-manager/pom.xml help:evaluate -Dexpression=project.version -DforceStdout)" >> "$GITHUB_ENV"
-          echo "GATEWAY_VERSION=$(mvn -q -f product-apim/gateway/pom.xml help:evaluate -Dexpression=project.version -DforceStdout)" >> "$GITHUB_ENV"
+          APIM_VERSION=$(mvn -q -f product-apim/all-in-one-apim/pom.xml help:evaluate -Dexpression=project.version -DforceStdout)
+          CP_VERSION=$(mvn -q -f product-apim/api-control-plane/pom.xml help:evaluate -Dexpression=project.version -DforceStdout)
+          TM_VERSION=$(mvn -q -f product-apim/traffic-manager/pom.xml help:evaluate -Dexpression=project.version -DforceStdout)
+          GATEWAY_VERSION=$(mvn -q -f product-apim/gateway/pom.xml help:evaluate -Dexpression=project.version -DforceStdout)
+          for name in APIM_VERSION CP_VERSION TM_VERSION GATEWAY_VERSION; do
+            if [ -z "${!name}" ]; then
+              echo "::error::Could not resolve $name from the product-apim POMs."
+              exit 1
+            fi
+          done
+          {
+            echo "APIM_VERSION=$APIM_VERSION"
+            echo "CP_VERSION=$CP_VERSION"
+            echo "TM_VERSION=$TM_VERSION"
+            echo "GATEWAY_VERSION=$GATEWAY_VERSION"
+          } >> "$GITHUB_ENV"
       # `mvn test` never runs the pre-integration-test executions, so the suite reads the image build's staging.
       - name: Restore testcontainers staging (target/is7, distributed image defaults)
         run: |
@@ -368,7 +394,8 @@ jobs:
           if-no-files-found: warn
       # A partial report would upload without error, so the report and every block's coverage dump are checked first.
       - name: Verify coverage report was generated
-        if: matrix.coverage
+        id: verify-coverage
+        if: ${{ always() && matrix.coverage }}
         run: |
           REPORT=$V2_DIR/tests-integration/cucumber-tests/target/coverage/output/txt/jacoco-it.xml
           if [ ! -s "$REPORT" ] || ! grep -q '<counter type="LINE"' "$REPORT"; then
@@ -397,7 +424,7 @@ jobs:
           fi
           echo "Coverage dumps: $dumped/$expected blocks, $restarts pre-restart dump(s)"
       - name: Upload integration test coverage to Codecov
-        if: ${{ always() && matrix.coverage }}
+        if: ${{ always() && matrix.coverage && steps.verify-coverage.outcome == 'success' }}
         uses: codecov/codecov-action@v7
         with:
           files: ${{ env.V2_DIR }}/tests-integration/cucumber-tests/target/coverage/output/txt/jacoco-it.xml
