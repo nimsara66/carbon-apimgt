@@ -79,9 +79,9 @@ jobs:
           disable_search: true
           flags: unit_tests
 
-  # Builds the APIM distributions against this carbon-apimgt build, and the integration-v2 Docker images, once.
-  # The test jobs receive the locally built images, the testcontainers staging (target/is7 and the distributed
-  # image defaults, produced only by `mvn install`) and the Maven repository (run-scoped cache).
+  # Builds the APIM distributions against this carbon-apimgt build, and the all-in-one integration-v2 Docker images,
+  # once. The test jobs receive the locally built images, the testcontainers staging (target/is7, produced only by
+  # `mvn install`) and the Maven repository (run-scoped cache).
   v2-build-images:
     needs: build-carbon
     runs-on: codebuild-wso2_carbon-apimgt-${{ github.run_id }}-${{ github.run_attempt }}
@@ -123,34 +123,21 @@ jobs:
           mkdir -p ~/.m2/repository
           tar -xzf "$RUNNER_TEMP/carbon-apimgt-build/carbon-apimgt-build.tar.gz" -C ~/.m2/repository
           echo "CARBON_APIMGT_VERSION=$(cat "$RUNNER_TEMP/carbon-apimgt-build/carbon-apimgt-version.txt")" >> "$GITHUB_ENV"
-      # Each version is resolved on its own line so a failing Maven call fails the step, and none is published empty.
-      - name: Resolve APIM product versions
+      # Resolved on its own line so a failing Maven call fails the step, and the version is never published empty.
+      - name: Resolve APIM product version
         run: |
           APIM_VERSION=$(mvn -q -f product-apim/all-in-one-apim/pom.xml help:evaluate -Dexpression=project.version -DforceStdout)
-          CP_VERSION=$(mvn -q -f product-apim/api-control-plane/pom.xml help:evaluate -Dexpression=project.version -DforceStdout)
-          TM_VERSION=$(mvn -q -f product-apim/traffic-manager/pom.xml help:evaluate -Dexpression=project.version -DforceStdout)
-          GATEWAY_VERSION=$(mvn -q -f product-apim/gateway/pom.xml help:evaluate -Dexpression=project.version -DforceStdout)
-          for name in APIM_VERSION CP_VERSION TM_VERSION GATEWAY_VERSION; do
-            if [ -z "${!name}" ]; then
-              echo "::error::Could not resolve $name from the product-apim POMs."
-              exit 1
-            fi
-          done
-          {
-            echo "APIM_VERSION=$APIM_VERSION"
-            echo "CP_VERSION=$CP_VERSION"
-            echo "TM_VERSION=$TM_VERSION"
-            echo "GATEWAY_VERSION=$GATEWAY_VERSION"
-          } >> "$GITHUB_ENV"
+          if [ -z "$APIM_VERSION" ]; then
+            echo "::error::Could not resolve APIM_VERSION from the product-apim POMs."
+            exit 1
+          fi
+          echo "APIM_VERSION=$APIM_VERSION" >> "$GITHUB_ENV"
       - name: Build APIM distributions with this carbon-apimgt (skip tests)
         run: >
           mvn clean install --file product-apim/pom.xml
           -Dcarbon.apimgt.version="$CARBON_APIMGT_VERSION"
           -Dmaven.test.skip=true -DskipBenchMarkTest=true -DskipRestartTests=true
           -Dapim.server.version="$APIM_VERSION"
-          -Ddistributed.apim.cp.image.name="distributed-apim-cp:${CP_VERSION}-jdk21"
-          -Ddistributed.apim.tm.image.name="distributed-apim-tm:${TM_VERSION}-jdk21"
-          -Ddistributed.apim.gateway.image.name="distributed-apim-gateway:${GATEWAY_VERSION}-jdk21"
       # The runner can itself be a container beside the Docker daemon, so host-gateway is not always the runner.
       # Docker builds reach the runner's servers (e.g. the distribution zip server on port 8000) at its own address.
       - name: Resolve runner address for Docker builds
@@ -158,11 +145,8 @@ jobs:
       - name: Build integration Docker images (no suite)
         working-directory: ${{ env.V2_DIR }}
         run: >
-          mvn install -Pinclude-distributed-images -pl tests-integration/cucumber-tests -am -DskipTests
+          mvn install -pl tests-integration/cucumber-tests -am -DskipTests
           -Dapim.server.version="$APIM_VERSION"
-          -Ddistributed.apim.cp.image.name="distributed-apim-cp:${CP_VERSION}-jdk21"
-          -Ddistributed.apim.tm.image.name="distributed-apim-tm:${TM_VERSION}-jdk21"
-          -Ddistributed.apim.gateway.image.name="distributed-apim-gateway:${GATEWAY_VERSION}-jdk21"
           -Ddocker.extra.hosts="$DOCKER_EXTRA_HOSTS"
       - name: Resolve Docker image names
         working-directory: ${{ env.V2_DIR }}
@@ -176,15 +160,10 @@ jobs:
           mkdir -p "$RUNNER_TEMP/v2-images"
           docker save \
             "$APIM_IMAGE" \
-            "distributed-apim-cp:${CP_VERSION}-jdk21" \
-            "distributed-apim-tm:${TM_VERSION}-jdk21" \
-            "distributed-apim-gateway:${GATEWAY_VERSION}-jdk21" \
             node-app-server:latest \
             "$SOLACE_SHIM_IMAGE" \
             "$SQUID_IMAGE" | gzip > "$RUNNER_TEMP/v2-images/images.tar.gz"
           tar -C "$V2_DIR/tests-common/testcontainers/target" -czf "$RUNNER_TEMP/v2-images/is7-staging.tar.gz" is7
-          tar -C "$V2_DIR/tests-common/testcontainers/target" -czf \
-            "$RUNNER_TEMP/v2-images/distributed-apim-staging.tar.gz" distributed-apim/defaults
       - name: Upload Docker images and staging
         uses: actions/upload-artifact@v4
         with:
@@ -193,9 +172,10 @@ jobs:
           retention-days: 3
           if-no-files-found: error
 
-  # Runs the product-apim integration-v2 suite against this carbon-apimgt build: the all-in-one and distributed
-  # suites, each split into two jobs by the blocks' group parameter. The steps follow the product-apim
-  # integration-v2 jobs (.github/workflows/maven.yml).
+  # Runs the product-apim all-in-one integration-v2 suite against this carbon-apimgt build, split into two jobs by the
+  # blocks' group parameter. The steps follow the product-apim integration-v2 jobs (.github/workflows/maven.yml),
+  # without their host preparation (browser cgroup, network namespace, clock), which needs privileges this runner's
+  # unprivileged container does not have.
   build-product:
     needs: v2-build-images
     runs-on: codebuild-wso2_carbon-apimgt-${{ github.run_id }}-${{ github.run_attempt }}
@@ -206,26 +186,13 @@ jobs:
             suite: testng-v2.xml
             group: group1
             coverage: true
-            topology: all-in-one
           - id: v2-all-in-one-group2
             suite: testng-v2.xml
             group: group2
             coverage: true
-            topology: all-in-one
-          - id: v2-distributed-group1
-            suite: testng-v2_distributed.xml
-            group: group1
-            coverage: false
-            topology: distributed
-          - id: v2-distributed-group2
-            suite: testng-v2_distributed.xml
-            group: group2
-            coverage: false
-            topology: distributed
       fail-fast: false
     env:
       V2_DIR: product-apim/all-in-one-apim/modules/integration-v2
-      V2_RESOURCES: product-apim/all-in-one-apim/modules/integration-v2/tests-integration/cucumber-tests/src/test/resources
     steps:
       - name: Run hostname
         run: hostname
@@ -265,31 +232,20 @@ jobs:
           path: ${{ runner.temp }}/v2-images
       - name: Load Docker images
         run: docker load < "$RUNNER_TEMP/v2-images/images.tar.gz"
-      # Each version is resolved on its own line so a failing Maven call fails the step, and none is published empty.
-      - name: Resolve APIM product versions
+      # Resolved on its own line so a failing Maven call fails the step, and the version is never published empty.
+      - name: Resolve APIM product version
         run: |
           APIM_VERSION=$(mvn -q -f product-apim/all-in-one-apim/pom.xml help:evaluate -Dexpression=project.version -DforceStdout)
-          CP_VERSION=$(mvn -q -f product-apim/api-control-plane/pom.xml help:evaluate -Dexpression=project.version -DforceStdout)
-          TM_VERSION=$(mvn -q -f product-apim/traffic-manager/pom.xml help:evaluate -Dexpression=project.version -DforceStdout)
-          GATEWAY_VERSION=$(mvn -q -f product-apim/gateway/pom.xml help:evaluate -Dexpression=project.version -DforceStdout)
-          for name in APIM_VERSION CP_VERSION TM_VERSION GATEWAY_VERSION; do
-            if [ -z "${!name}" ]; then
-              echo "::error::Could not resolve $name from the product-apim POMs."
-              exit 1
-            fi
-          done
-          {
-            echo "APIM_VERSION=$APIM_VERSION"
-            echo "CP_VERSION=$CP_VERSION"
-            echo "TM_VERSION=$TM_VERSION"
-            echo "GATEWAY_VERSION=$GATEWAY_VERSION"
-          } >> "$GITHUB_ENV"
+          if [ -z "$APIM_VERSION" ]; then
+            echo "::error::Could not resolve APIM_VERSION from the product-apim POMs."
+            exit 1
+          fi
+          echo "APIM_VERSION=$APIM_VERSION" >> "$GITHUB_ENV"
       # `mvn test` never runs the pre-integration-test executions, so the suite reads the image build's staging.
-      - name: Restore testcontainers staging (target/is7, distributed image defaults)
+      - name: Restore testcontainers staging (target/is7)
         run: |
           mkdir -p "$V2_DIR/tests-common/testcontainers/target"
           tar -C "$V2_DIR/tests-common/testcontainers/target" -xzf "$RUNNER_TEMP/v2-images/is7-staging.tar.gz"
-          tar -C "$V2_DIR/tests-common/testcontainers/target" -xzf "$RUNNER_TEMP/v2-images/distributed-apim-staging.tar.gz"
       - name: Resolve runner address for host.docker.internal
         run: echo "DOCKER_EXTRA_HOSTS=--add-host=host.docker.internal:$(hostname -I | awk '{print $1}')" >> "$GITHUB_ENV"
       # The coverage report is built from the class files of the image that ran, so JaCoCo class ids match.
@@ -307,30 +263,31 @@ jobs:
           docker cp "$cid:$BASE/components/plugins"        "$SRC/plugins"
           docker cp "$cid:$BASE/deployment/server/webapps" "$SRC/webapps"
           echo "APIM_COVERAGE_CLASSFILES=$SRC" >> "$GITHUB_ENV"
-      - name: Prepare distributed memory and swap budget
-        if: matrix.topology == 'distributed'
-        run: sudo bash "$V2_RESOURCES/distributed-memory-budget/setup-distributed-memory-budget.sh" setup "$RUNNER_TEMP/apim-distributed-memory-budget"
-      - name: Create browser cgroup
+      # The suite caps each block's APIM and external IS container at one CPU (apimCpuLimit / isCpuLimit block
+      # parameters) for 4-CPU runners. This runner has 8 vCPUs, so the caps are removed from the checked-out suite.
+      - name: Remove APIM and IS CPU caps from the suite
+        working-directory: ${{ env.V2_DIR }}/tests-integration/cucumber-tests/src/test/resources
         env:
-          BROWSER_CGROUP_PATH: ${{ matrix.topology == 'distributed' && '/sys/fs/cgroup/apimdistributed.slice/apimdistributed-browser.service' || '/sys/fs/cgroup/pw-browser' }}
-          BROWSER_MEMORY_LIMIT_BYTES: ${{ matrix.topology == 'distributed' && '536870912' || '2684354560' }}
-          BROWSER_SWAP_LIMIT_BYTES: ${{ matrix.topology == 'distributed' && '134217728' || '0' }}
-        run: sudo bash "$V2_RESOURCES/browser-cgroup/setup-browser-cgroup.sh" "$BROWSER_CGROUP_PATH" "$BROWSER_MEMORY_LIMIT_BYTES" "$BROWSER_SWAP_LIMIT_BYTES"
-      - name: Configure browser network isolation
+          SUITE: ${{ matrix.suite }}
         run: |
-          sudo apt-get update
-          sudo apt-get install -y socat iproute2
-          sudo bash "$V2_RESOURCES/browser-cgroup/setup-browser-network.sh"
-      - name: Prepare host clock for integration-v2
-        run: |
-          sudo apt-get install -y chrony
-          CLOCK_LOG_DIR="$GITHUB_WORKSPACE/$V2_DIR/tests-integration/cucumber-tests/target/logs/host-clock/preparation"
-          mkdir -p "$CLOCK_LOG_DIR"
-          sudo bash "$V2_RESOURCES/host-clock/prepare-test-clock.sh" prepare "$CLOCK_LOG_DIR"
-          echo "APIM_CLOCK_PREPARED_FILE=$CLOCK_LOG_DIR/prepared.json" >> "$GITHUB_ENV"
+          python3 - "$SUITE" <<'PY'
+          import re, sys
+          import xml.etree.ElementTree as ET
+          path = sys.argv[1]
+          cap = re.compile(r'^[ \t]*<parameter\s+name="(apimCpuLimit|isCpuLimit)"\s+value="[^"]*"\s*/>[ \t]*\r?\n', re.M)
+          text = open(path, encoding="utf-8").read()
+          stripped, removed = cap.subn("", text)
+          if removed == 0:
+              sys.exit(f"::error::{path} declares no apimCpuLimit/isCpuLimit parameters; the cap removal no longer matches the suite.")
+          open(path, "w", encoding="utf-8").write(stripped)
+          root = ET.parse(path).getroot()
+          left = [p.get("name") for p in root.iter("parameter") if p.get("name") in ("apimCpuLimit", "isCpuLimit")]
+          if left:
+              sys.exit(f"::error::{path} still declares {len(left)} CPU cap parameters after removal.")
+          print(f"Removed {removed} APIM/IS CPU cap parameters from {path}")
+          PY
       # `mvn test` (not install) uses the loaded images and restored staging instead of rebuilding them.
       - name: Run all-in-one integration-v2 suite
-        if: matrix.topology == 'all-in-one'
         working-directory: ${{ env.V2_DIR }}
         run: >
           python3 tests-integration/cucumber-tests/src/test/resources/host-diagnostics/run-with-host-diagnostics.py
@@ -339,47 +296,16 @@ jobs:
           -Dsurefire.suite.xml=${{ matrix.suite }}
           -Dapim.v2.test.groups=${{ matrix.group }}
           -Dapim.server.version="$APIM_VERSION"
-          -Ddistributed.apim.cp.image.name="distributed-apim-cp:${CP_VERSION}-jdk21"
-          -Ddistributed.apim.tm.image.name="distributed-apim-tm:${TM_VERSION}-jdk21"
-          -Ddistributed.apim.gateway.image.name="distributed-apim-gateway:${GATEWAY_VERSION}-jdk21"
           -Dplaywright.sso=true
           -Dapim.coverage=true
           -Dapim.coverage.classfiles="$APIM_COVERAGE_CLASSFILES"
-          -Dapim.clock.prepared.file="$APIM_CLOCK_PREPARED_FILE"
           -Ddocker.extra.hosts="$DOCKER_EXTRA_HOSTS"
-      - name: Run distributed integration-v2 suite (coverage intentionally disabled)
-        if: matrix.topology == 'distributed'
-        working-directory: ${{ env.V2_DIR }}
-        run: |
-          SUITE_USER="$(id -un)"
-          SUITE_NOFILE_LIMIT="$(ulimit -Sn):$(ulimit -Hn)"
-          sudo -E systemd-run --scope --slice=apimdistributed.slice --unit=apim-distributed-suite \
-            --working-directory="$GITHUB_WORKSPACE/$V2_DIR" -- \
-            prlimit --nofile="$SUITE_NOFILE_LIMIT" -- \
-            setpriv --reuid="$(id -u)" --regid="$(id -g)" --init-groups -- \
-            env HOME="$HOME" PATH="$PATH" JAVA_HOME="$JAVA_HOME" USER="$SUITE_USER" LOGNAME="$SUITE_USER" \
-            python3 tests-integration/cucumber-tests/src/test/resources/host-diagnostics/run-with-host-diagnostics.py \
-              --output tests-integration/cucumber-tests/target/logs/host-diagnostics -- \
-              mvn test -pl tests-integration/cucumber-tests -am \
-                -Dsurefire.suite.xml=${{ matrix.suite }} \
-                -Dapim.v2.test.groups=${{ matrix.group }} \
-                -Dapim.server.version="$APIM_VERSION" \
-                -Ddistributed.apim.cp.image.name="distributed-apim-cp:${CP_VERSION}-jdk21" \
-                -Ddistributed.apim.tm.image.name="distributed-apim-tm:${TM_VERSION}-jdk21" \
-                -Ddistributed.apim.gateway.image.name="distributed-apim-gateway:${GATEWAY_VERSION}-jdk21" \
-                -Dplaywright.sso=true \
-                -Dplaywright.browser.cgroup=/sys/fs/cgroup/apimdistributed.slice/apimdistributed-browser.service \
-                -Dapim.clock.prepared.file="$APIM_CLOCK_PREPARED_FILE" \
-                -Ddocker.extra.hosts="$DOCKER_EXTRA_HOSTS"
       - name: Stop host diagnostics collector
         if: always()
         working-directory: ${{ env.V2_DIR }}
         run: >
           python3 tests-integration/cucumber-tests/src/test/resources/host-diagnostics/run-with-host-diagnostics.py
           --output tests-integration/cucumber-tests/target/logs/host-diagnostics --stop
-      - name: Restore Docker and host swap configuration
-        if: always() && matrix.topology == 'distributed'
-        run: sudo bash "$V2_RESOURCES/distributed-memory-budget/setup-distributed-memory-budget.sh" cleanup "$RUNNER_TEMP/apim-distributed-memory-budget"
       - name: Archive test reports
         if: always()
         uses: actions/upload-artifact@v4
